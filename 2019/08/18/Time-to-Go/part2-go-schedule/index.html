@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang>
+<head><meta name="generator" content="Hexo 3.9.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="Time to go,">
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="Go Schedulegoroutine的高并发能力与其背后的调度器息息相关，这一章我们就来了解一下go的调度机制~同时，在本章的最后一节会介绍一个Go并发调优的大杀器go trace来帮助大家更好的学习go的调度！！！ 1. 砖头，小车与Gopher – go的调度模型在山的那边海的那边有一群勤劳的Gopher，他们日以继夜的干一件事情—-搬砖。  搬砖这件看似简单的事情背后到底隐藏的什么，为何">
+<meta name="keywords" content="Time to go">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go Schedule">
+<meta property="og:url" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/index.html">
+<meta property="og:site_name" content="Learning Go">
+<meta property="og:description" content="Go Schedulegoroutine的高并发能力与其背后的调度器息息相关，这一章我们就来了解一下go的调度机制~同时，在本章的最后一节会介绍一个Go并发调优的大杀器go trace来帮助大家更好的学习go的调度！！！ 1. 砖头，小车与Gopher – go的调度模型在山的那边海的那边有一群勤劳的Gopher，他们日以继夜的干一件事情—-搬砖。  搬砖这件看似简单的事情背后到底隐藏的什么，为何">
+<meta property="og:locale" content="default">
+<meta property="og:image" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/go-schedule.jpg">
+<meta property="og:image" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/go-schedule-workingSteal.png">
+<meta property="og:image" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/handoffp.png">
+<meta property="og:image" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/preempt.png">
+<meta property="og:image" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/newproc.png">
+<meta property="og:image" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/trace1.PNG">
+<meta property="og:updated_time" content="2019-08-18T04:04:21.342Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Go Schedule">
+<meta name="twitter:description" content="Go Schedulegoroutine的高并发能力与其背后的调度器息息相关，这一章我们就来了解一下go的调度机制~同时，在本章的最后一节会介绍一个Go并发调优的大杀器go trace来帮助大家更好的学习go的调度！！！ 1. 砖头，小车与Gopher – go的调度模型在山的那边海的那边有一群勤劳的Gopher，他们日以继夜的干一件事情—-搬砖。  搬砖这件看似简单的事情背后到底隐藏的什么，为何">
+<meta name="twitter:image" content="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/go-schedule.jpg">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: 'Author'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/">
+
+
+
+
+
+  <title>Go Schedule | Learning Go</title>
+  
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="default">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Learning Go</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br>
+            
+            Home
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br>
+            
+            Archives
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/08/18/Time-to-Go/part2-go-schedule/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="杨笛航">
+      <meta itemprop="description" content>
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Learning Go">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">Go Schedule</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-08-18T11:56:07+08:00">
+                2019-08-18
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">In</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/golang/" itemprop="url" rel="index">
+                    <span itemprop="name">golang</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h1 id="Go-Schedule"><a href="#Go-Schedule" class="headerlink" title="Go Schedule"></a>Go Schedule</h1><p>goroutine的高并发能力与其背后的调度器息息相关，这一章我们就来了解一下go的调度机制~同时，在本章的最后一节会介绍一个Go并发调优的大杀器go trace来帮助大家更好的学习go的调度！！！</p>
+<h2 id="1-砖头，小车与Gopher-–-go的调度模型"><a href="#1-砖头，小车与Gopher-–-go的调度模型" class="headerlink" title="1. 砖头，小车与Gopher – go的调度模型"></a>1. 砖头，小车与Gopher – go的调度模型</h2><p>在山的那边海的那边有一群勤劳的Gopher，他们日以继夜的干一件事情—-搬砖。</p>
+<p><img src="/2019/08/18/Time-to-Go/part2-go-schedule/go-schedule.jpg" alt="go-schedule"></p>
+<p>搬砖这件看似简单的事情背后到底隐藏的什么，为何会和go的调度模型扯上关联？不妨先来一发哲学三问。</p>
+<p>搬的什么？– 砖</p>
+<p>谁在搬？ – gopher</p>
+<p>用什么搬的？– 小推车</p>
+<p>当大家机智的回答出这些问题的时候，恭喜你对go的调度模型已经有一个初步的认识了。假如这些砖是golang世界中的一个个goroutine，那么gopher搬砖的过程就是调度goroutine的过程，而砖，gopher和小车在go世界中的映射就是我们这一章节的三大主角，调度模型的核心。</p>
+<p>调度的什么？— g : 它就是大名顶顶的goroutine</p>
+<p>谁在执行调度？— m : 给我们打黑工的苦逼线程</p>
+<p>用的什么调度？ — p : 线程执行的goroutine队列</p>
+<p>可以在<code>runtime/runtime2.go</code>中看到三大主角的原貌，在这里它们的核心内容可以简化为以下结构体：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//g本质上是维护了一个协程栈</span></span><br><span class="line"><span class="comment">//被运行的g会和执行他的m关联上</span></span><br><span class="line"><span class="keyword">type</span> g <span class="keyword">struct</span> &#123;</span><br><span class="line">	stack          stack   <span class="comment">// offset known to runtime/cgo</span></span><br><span class="line">    sched          gobuf   <span class="comment">// 当发生调度时，保存现场，记录了当前运行的pc和sp</span></span><br><span class="line">    atomicstatus   <span class="keyword">uint32</span>  <span class="comment">// 当前goroutine的状态</span></span><br><span class="line">	m              *m      <span class="comment">// current m; offset known to arm liblink</span></span><br><span class="line">    <span class="comment">//preempt是抢占标志位，m在执行g时会查看该标志位，以决定是否中断当前任务</span></span><br><span class="line">	preempt        <span class="keyword">bool</span>    <span class="comment">// preemption signal, duplicates stackguard0 = stackpreempt</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//m有自己线程栈（g0栈），当前运行的g，以及一个p（goroutine队列）</span></span><br><span class="line"><span class="comment">//m可以脱离p运行当m执行的不是go代码的时候</span></span><br><span class="line"><span class="keyword">type</span> m <span class="keyword">struct</span> &#123;</span><br><span class="line">	g0            *g       <span class="comment">// goroutine with scheduling stack</span></span><br><span class="line">	procid        <span class="keyword">uint64</span>   <span class="comment">// for debuggers, but offset not hard-coded</span></span><br><span class="line">	curg          *g       <span class="comment">// current running goroutine</span></span><br><span class="line">	p             puintptr <span class="comment">// attached p for executing go code (nil if not executing go</span></span><br><span class="line">	park          note</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// p本质上是一个goroutine队--runq ，容量为256。</span></span><br><span class="line"><span class="comment">// 一个状态正常的p是需要与m绑定的</span></span><br><span class="line"><span class="comment">// 当前goroutine产生出来的子goroutine会被放在runnext中而非队尾</span></span><br><span class="line"><span class="keyword">type</span> p <span class="keyword">struct</span> &#123;</span><br><span class="line">    m           muintptr   <span class="comment">// back-link to associated m (nil if idle)</span></span><br><span class="line">	<span class="comment">// Queue of runnable goroutines. Accessed without lock.</span></span><br><span class="line">	runqhead <span class="keyword">uint32</span></span><br><span class="line">	runqtail <span class="keyword">uint32</span></span><br><span class="line">	runq     [<span class="number">256</span>]guintptr</span><br><span class="line">	<span class="comment">// runnext, if non-nil, is a runnable G that was ready'd by</span></span><br><span class="line">	<span class="comment">// the current G and should be run next instead of what's in</span></span><br><span class="line">	<span class="comment">// runq if there's time remaining in the running G's time</span></span><br><span class="line">	<span class="comment">// slice. It will inherit the time left in the current time</span></span><br><span class="line">	<span class="comment">// slice. If a set of goroutines is locked in a</span></span><br><span class="line">	<span class="comment">// communicate-and-wait pattern, this schedules that set as a</span></span><br><span class="line">	<span class="comment">// unit and eliminates the (potentially large) scheduling</span></span><br><span class="line">	<span class="comment">// latency that otherwise arises from adding the ready'd</span></span><br><span class="line">	<span class="comment">// goroutines to the end of the run queue.</span></span><br><span class="line">	runnext guintptr</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>runtime/proc.go--func schedule()</code></p>
+<p>那么go的调度体系需要解决那些问题呢？回到gopher的世界中，有了小车，gopher搬砖的效率得到了很大的提升，但是作为黑心老板的我们想要榨干gopher的劳动力，不停的大量制造砖扔到gopher的小车子里，第一个问题来了，小车的容量有限，如果制造砖的速度大于消耗砖的速度，小车将无法继续装入更多的砖块了。同样的，go的世界中的小车P只能容纳256个goroutine，那么超出限额的goroutine应该放在哪里呢？</p>
+<p>为了解决这个问题，go引入了schedt结构，该结构时全局唯一也是全局可见的，它的作用主要为了存放关于调度的全局信息，比如，总共有多少个P，多少个空置的P，多少个M…有了这些信息才可以统筹规划调度，之后会详细介绍。除了这些，schedt结构中还维护了一个全局的goroutine队列，这个队列长度没有限制，当goroutine的数量超出P的容量时，M会将P中一半的goroutine放入全局队列。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> schedt <span class="keyword">struct</span> &#123;</span><br><span class="line">    <span class="comment">//...</span></span><br><span class="line">	<span class="comment">// Global runnable queue.</span></span><br><span class="line">	runqhead guintptr</span><br><span class="line">	runqtail guintptr</span><br><span class="line">	runqsize <span class="keyword">int32</span></span><br><span class="line">    <span class="comment">// 除了全局队列，schedt中也会存放关于调度的全局信息...</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>runtime/proc.go--func findrunnable()</code></p>
+<p>聪明的gopher也找到了相似的解决方法，它们建了一个砖堆用来存放多余的砖块。gopher夜以继日幸苦劳作终于把车中的goroutine都执行完了，但是，它想起来还有一部分砖被自己扔在了砖堆中，于是它又跑去砖堆中拿goroutine，那么它应该拿多少块砖呢？gopher想到自己有3个小伙伴，它觉得应该和它的小伙伴们平分这一堆砖，于是它拿走了砖堆中四分之一的砖。在go的世界中M会根据机器的核数来平分全局队列中的goroutine，当然如果平分后的结果大于P的容量，那么它只会拿走P的容量个goroutine。<code>n := sched.runqsize/gomaxprocs + 1</code>.（n大于256则取256）。</p>
+<p>为了防止全局队列中的goroutine“饿死”，在执行了61个本地队列的服务后，会从全局队列中获取一个服务。</p>
+<p>终于有一天，gopher发现砖堆中的砖都也被拿完了，gopher感觉自己已经到达了人生的巅峰终于可以安度晚年的。这时，另一个gopher推着小车经过了它的身边，善良而又勤劳的gopher想，虽然自己已经可以功成身退了，但是自己的兄弟们还在水深火热的境地中搬砖，于是它又推起了小车，偷偷的将刚刚那个gopher车里一半的砖放到了自己车里…</p>
+<p>对于go中的M来说，这个过程称作为working steal，其源码如下：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Steal half of elements from local runnable queue of p2</span></span><br><span class="line"><span class="comment">// and put onto local runnable queue of p.</span></span><br><span class="line"><span class="comment">// Returns one of the stolen elements (or nil if failed).</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">runqsteal</span><span class="params">(_p_, p2 *p, stealRunNextG <span class="keyword">bool</span>)</span> *<span class="title">g</span></span> &#123;</span><br><span class="line">	t := _p_.runqtail</span><br><span class="line">	n := runqgrab(p2, &amp;_p_.runq, t, stealRunNextG)</span><br><span class="line">	<span class="keyword">if</span> n == <span class="number">0</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">	&#125;</span><br><span class="line">	n--</span><br><span class="line">	gp := _p_.runq[(t+n)%<span class="keyword">uint32</span>(<span class="built_in">len</span>(_p_.runq))].ptr()</span><br><span class="line">	<span class="keyword">if</span> n == <span class="number">0</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> gp</span><br><span class="line">	&#125;</span><br><span class="line">	h := atomic.Load(&amp;_p_.runqhead) <span class="comment">// load-acquire, synchronize with consumers</span></span><br><span class="line">	<span class="keyword">if</span> t-h+n &gt;= <span class="keyword">uint32</span>(<span class="built_in">len</span>(_p_.runq)) &#123;</span><br><span class="line">		throw(<span class="string">"runqsteal: runq overflow"</span>)</span><br><span class="line">	&#125;</span><br><span class="line">	atomic.Store(&amp;_p_.runqtail, t+n) <span class="comment">// store-release, makes the item available for consumption</span></span><br><span class="line">	<span class="keyword">return</span> gp</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>m会从其他m的p的队尾偷取一半的goroutine，以避免锁操作。</p>
+<p><img src="/2019/08/18/Time-to-Go/part2-go-schedule/go-schedule-workingSteal.png" alt="go-schedule-workingSteal"></p>
+<p>终于有一天，该搬的砖搬完了，不该搬的砖也偷不到了，gopher可以去休息了么？不一定，它有可能把小车放一旁被任命为负责值班的gopher–<code>spining m</code>。什么情况下M会变<code>spining m</code>，它又要干些什么呢？</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> !_g_.m.spinning &amp;&amp; <span class="number">2</span>*atomic.Load(&amp;sched.nmspinning) &gt;= procs-atomic.Load(&amp;sched.npidle) &#123;</span><br><span class="line">	<span class="keyword">goto</span> stop</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">if</span> !_g_.m.spinning &#123;</span><br><span class="line">	_g_.m.spinning = <span class="literal">true</span></span><br><span class="line">	atomic.Xadd(&amp;sched.nmspinning, <span class="number">1</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>当在运作的P数量（这个数量就被存在刚刚提到的schedt结构体中）大于<code>spinning m</code>数量两倍的时候，没事干的M就会被派去值班，简单的来讲，有两个还在干活的M就至少会有一个值班M，以此类推。M被任命为值班者后会再次确认是否有还在干活的小伙伴们，是否有epoll任务是否有gc任务，如果有上述任务，那么<code>spinning m</code>再次尝试working steal或者执行相关任务。</p>
+<p>有些时候值班小哥发现自己去工作了就已经没有人值班了，这个时候它会唤醒一个已经休息的gopher成为新的值班者。</p>
+<h2 id="2-Gopher里的监工–Sysmon"><a href="#2-Gopher里的监工–Sysmon" class="headerlink" title="2. Gopher里的监工–Sysmon"></a>2. Gopher里的监工–Sysmon</h2><p>砖，小车，gopher的模型似乎已经足够支持烧砖厂的日常运作了，直到有一天，gopher的小车中出现了一块特别难以烧制的砖，在烧这块砖的过程中它花了很多时间导致了大量的砖堆积在它的小车中得不到烧制。在go的世界中这件事时常发生，如果执行某个goroutine需要耗费大量的时间，那么会导致其他goroutine无法得到调度，所以我们需要一个监工的角色来查看是否有这种情况发生，在go的世界中这个监工就是Sysmon。</p>
+<p><code>runtime/proc.g---func sysmon()</code></p>
+<p>Sysmon主要干如下几件事情：</p>
+<ol>
+<li>查看是否有可以运行的网络任务</li>
+<li>处理长时间处于执行同一个任务的线程</li>
+<li>2分钟进行一次强制GC</li>
+<li>将线程申请来的5分钟没有用的span退还给操作系统</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">graph LR</span><br><span class="line">A(sysmon)--&gt;B(poll network)</span><br><span class="line">B--&gt;C(retakeP)</span><br><span class="line">C--&gt;D(force GC)</span><br><span class="line">D--&gt;E(free unused span)</span><br></pre></td></tr></table></figure>
+
+<p><code>runtime/proc.g---func sysmon()</code></p>
+<p>跟调度关联紧密的是处理长时间被执行的goroutine的操作，该操作称为<code>retakep</code>。sysmon首先会查看当前执行goroutine的执行时常，当其超过了20us，就会触发retakep。sysmon首先会查看是由何原因导致了m长时间执行同一个任务。如果m长时间进入Syscall状态，那么当前goroutine无法被抢占，该M也没有能力继续执行P中的其他goroutine，所以sysmon会脱离M和P的绑定关系，同时唤醒或创建新的M和P绑定。</p>
+<p><img src="/2019/08/18/Time-to-Go/part2-go-schedule/handoffp.png" alt="handoffp"></p>
+<p>如果M并未进入Syscall，那么Sysmon置起当前goroutine的抢占标志位。当M发现当前G的抢占标志位被置起时，会将该G调度置全局队列中。</p>
+<p><img src="/2019/08/18/Time-to-Go/part2-go-schedule/preempt.png" alt="preempt"></p>
+<h2 id="3-Go背后的故事"><a href="#3-Go背后的故事" class="headerlink" title="3. Go背后的故事"></a>3. Go背后的故事</h2><p>上一章讲到goroutine的用法，只需要<code>go func</code>即可，那么<code>go</code>关键字的背后是怎么将任务添加到调度队列中的呢？</p>
+<p>首先编译器会识别出哪些地方进行了函数调用，当不加go关键字时，这次调用就是一次正常调用，加了go关键字，这次调用就成为了一次<code>callGo</code>，编译器会进行如下操作：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> k == callGo:</span><br><span class="line">	call = s.newValue1A(ssa.OpStaticCall, types.TypeMem, newproc, s.mem())</span><br></pre></td></tr></table></figure>
+
+<p>简单来讲，callGo会导致此处调用newproc函数，<code>newproc = sysfunc(&quot;newproc&quot;)</code>。我们在<code>go/runtime/proc.go</code>中可以找到这个函数。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">newproc</span><span class="params">(siz <span class="keyword">int32</span>, fn *funcval)</span></span> &#123;</span><br><span class="line">	argp := add(unsafe.Pointer(&amp;fn), sys.PtrSize)</span><br><span class="line">	gp := getg()  <span class="comment">//这里拿到caller的goroutine</span></span><br><span class="line">	pc := getcallerpc()</span><br><span class="line">    <span class="comment">//systemstack意味着里面的函数式通过线程栈（g0栈）来进行的</span></span><br><span class="line">	systemstack(<span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">		newproc1(fn, (*<span class="keyword">uint8</span>)(argp), siz, gp, pc) </span><br><span class="line">	&#125;)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">newproc1</span><span class="params">(fn *funcval, argp *<span class="keyword">uint8</span>, narg <span class="keyword">int32</span>, callergp *g, callerpc <span class="keyword">uintptr</span>)</span></span> &#123;</span><br><span class="line">    _g_ := getg() <span class="comment">//这里又getg了，这个g就是g0</span></span><br><span class="line">    <span class="comment">//...忽略一些细节</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">//这里需要注意一下函数参数表在go里面不能无限大的...</span></span><br><span class="line">	<span class="comment">// We could allocate a larger initial stack if necessary.</span></span><br><span class="line">	<span class="comment">// Not worth it: this is almost always an error.</span></span><br><span class="line">	<span class="comment">// 4*sizeof(uintreg): extra space added below</span></span><br><span class="line">	<span class="comment">// sizeof(uintreg): caller's LR (arm) or return address (x86, in gostartcall).</span></span><br><span class="line">	<span class="keyword">if</span> siz &gt;= _StackMin<span class="number">-4</span>*sys.RegSize-sys.RegSize &#123;</span><br><span class="line">		throw(<span class="string">"newproc: function arguments too large for new goroutine"</span>)</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">//这里拿到了m的小车</span></span><br><span class="line">	_p_ := _g_.m.p.ptr()</span><br><span class="line">    <span class="comment">//之前执行完的g会暂时放到_p_.gFree中，所以先尝试从gFree中获得新g</span></span><br><span class="line">	newg := gfget(_p_)</span><br><span class="line">    <span class="comment">//没拿到g的话那么会创建一个g</span></span><br><span class="line">	<span class="keyword">if</span> newg == <span class="literal">nil</span> &#123;</span><br><span class="line">		newg = malg(_StackMin)</span><br><span class="line">		casgstatus(newg, _Gidle, _Gdead)</span><br><span class="line">		allgadd(newg) <span class="comment">// publishes with a g-&gt;status of Gdead so GC scanner doesn't look at uninitialized stack.</span></span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">//忽略一些newg初始化的细节。这里开始它就是一个runnable的g了</span></span><br><span class="line">	casgstatus(newg, _Gdead, _Grunnable)</span><br><span class="line"></span><br><span class="line">    <span class="comment">//...</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">//将g放入任务队列中</span></span><br><span class="line">	runqput(_p_, newg, <span class="literal">true</span>)</span><br><span class="line"></span><br><span class="line">    <span class="comment">//当启动一个g时，会查看是否有idle状态的p,如果有的话且此时没有spinning m,就会唤醒一个spinning m</span></span><br><span class="line">	<span class="keyword">if</span> atomic.Load(&amp;sched.npidle) != <span class="number">0</span> &amp;&amp; atomic.Load(&amp;sched.nmspinning) == <span class="number">0</span> &amp;&amp; mainStarted &#123;</span><br><span class="line">		wakep()</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">//...</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>比较有意思的是runqput的设计:</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">runqput</span><span class="params">(_p_ *p, gp *g, next <span class="keyword">bool</span>)</span></span> &#123;</span><br><span class="line">    <span class="comment">//创建的goroutine会有一半的几率被放入_p_.runnext</span></span><br><span class="line">	<span class="keyword">if</span> randomizeScheduler &amp;&amp; next &amp;&amp; fastrand()%<span class="number">2</span> == <span class="number">0</span> &#123;</span><br><span class="line">		next = <span class="literal">false</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">//如果被放入runnext，则与oldnext互换身份</span></span><br><span class="line">	<span class="keyword">if</span> next &#123;</span><br><span class="line">	retryNext:</span><br><span class="line">		oldnext := _p_.runnext</span><br><span class="line">		<span class="keyword">if</span> !_p_.runnext.cas(oldnext, guintptr(unsafe.Pointer(gp))) &#123;</span><br><span class="line">			<span class="keyword">goto</span> retryNext</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">if</span> oldnext == <span class="number">0</span> &#123;</span><br><span class="line">			<span class="keyword">return</span></span><br><span class="line">		&#125;</span><br><span class="line">		<span class="comment">// Kick the old runnext out to the regular run queue.</span></span><br><span class="line">		gp = oldnext.ptr()</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">retry:</span><br><span class="line">    <span class="comment">//尝试将任务放入m的本地队列的队尾</span></span><br><span class="line">	h := atomic.Load(&amp;_p_.runqhead) <span class="comment">// load-acquire, synchronize with consumers</span></span><br><span class="line">	t := _p_.runqtail</span><br><span class="line">	<span class="keyword">if</span> t-h &lt; <span class="keyword">uint32</span>(<span class="built_in">len</span>(_p_.runq)) &#123;</span><br><span class="line">		_p_.runq[t%<span class="keyword">uint32</span>(<span class="built_in">len</span>(_p_.runq))].set(gp)</span><br><span class="line">		atomic.Store(&amp;_p_.runqtail, t+<span class="number">1</span>) <span class="comment">// store-release, makes the item available for consumption</span></span><br><span class="line">		<span class="keyword">return</span></span><br><span class="line">	&#125;</span><br><span class="line">    <span class="comment">//本地队列被放满时，放入全局队列。</span></span><br><span class="line">	<span class="keyword">if</span> runqputslow(_p_, gp, h, t) &#123;</span><br><span class="line">		<span class="keyword">return</span></span><br><span class="line">	&#125;</span><br><span class="line">	<span class="comment">// the queue is not full, now the put above must succeed</span></span><br><span class="line">	<span class="keyword">goto</span> retry</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><img src="/2019/08/18/Time-to-Go/part2-go-schedule/newproc.png" alt="newproc"></p>
+<h2 id="4-上帝说要有光-–-main-goroutine"><a href="#4-上帝说要有光-–-main-goroutine" class="headerlink" title="4. 上帝说要有光 – main goroutine"></a>4. 上帝说要有光 – main goroutine</h2><p>在讲go调度模型之前，我们不访先来思考一个问题，go的程序是如何开始的？</p>
+<p>接下来我们一层层的拨开披在main.main外面的外衣，看看它们分别做了什么。</p>
+<p>以amd64系统为例，在go源码的runtime包中，找到asm_amd64.s这个文件，该文件中的main函数是所有go程序的入口，它的内容是调用runtime.rt0_go。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">TEXT main(SB),NOSPLIT,$-8</span><br><span class="line">	JMP	runtime·rt0_go(SB)</span><br></pre></td></tr></table></figure>
+
+<p>runtime.rt0_go这个函数的内容就十分丰富了，我们忽略一些细节操作。看看它的主要功能有哪些。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line">TEXT runtime·rt0_go(SB),NOSPLIT,$0</span><br><span class="line">	//...</span><br><span class="line">	</span><br><span class="line">	// 初始化了g0</span><br><span class="line">	// create istack out of the given (operating system) stack.</span><br><span class="line">	// _cgo_init may update stackguard.</span><br><span class="line">	MOVQ	$runtime·g0(SB), DI</span><br><span class="line">	LEAQ	(-64*1024+104)(SP), BX</span><br><span class="line">	MOVQ	BX, g_stackguard0(DI)</span><br><span class="line">	MOVQ	BX, g_stackguard1(DI)</span><br><span class="line">	MOVQ	BX, (g_stack+stack_lo)(DI)</span><br><span class="line">	MOVQ	SP, (g_stack+stack_hi)(DI)</span><br><span class="line"></span><br><span class="line">    // 根据cpu和系统信息做相应的初始化操作</span><br><span class="line">    //...</span><br><span class="line"></span><br><span class="line">ok:</span><br><span class="line">    // 将g0和m0关联</span><br><span class="line">	// set the per-goroutine and per-mach &quot;registers&quot;</span><br><span class="line">	get_tls(BX)</span><br><span class="line">	LEAQ	runtime·g0(SB), CX</span><br><span class="line">	MOVQ	CX, g(BX)</span><br><span class="line">	LEAQ	runtime·m0(SB), AX</span><br><span class="line"></span><br><span class="line">	// save m-&gt;g0 = g0</span><br><span class="line">	MOVQ	CX, m_g0(AX)</span><br><span class="line">	// save m0 to g0-&gt;m</span><br><span class="line">	MOVQ	AX, g_m(CX)</span><br><span class="line">	</span><br><span class="line">	//...</span><br><span class="line">	//初始化操作</span><br><span class="line">	CALL	runtime·args(SB)</span><br><span class="line">	CALL	runtime·osinit(SB)</span><br><span class="line">	CALL	runtime·schedinit(SB)</span><br><span class="line"></span><br><span class="line">    // 看了这么久终于看到入口了，runtime.main进来了!!!</span><br><span class="line">	// create a new goroutine to start program</span><br><span class="line">	MOVQ	$runtime·mainPC(SB), AX		// entry</span><br><span class="line">	PUSHQ	AX</span><br><span class="line">	PUSHQ	$0			// arg size</span><br><span class="line">	CALL	runtime·newproc(SB)</span><br><span class="line">	POPQ	AX</span><br><span class="line">	POPQ	AX</span><br><span class="line"></span><br><span class="line">	// 调用mstart</span><br><span class="line">	CALL	runtime·mstart(SB)</span><br><span class="line"></span><br><span class="line">	CALL	runtime·abort(SB)	// mstart should never return</span><br><span class="line">	RET</span><br></pre></td></tr></table></figure>
+
+<p>我们理一理rt0_go干的事情：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">graph LR</span><br><span class="line">A(初始化g0)--&gt;B(关联g0和m0)</span><br><span class="line">B--&gt;C(各种init)</span><br><span class="line">C--&gt;D(调用newproc)</span><br><span class="line">D--&gt;调用mstart</span><br></pre></td></tr></table></figure>
+
+<p>回忆以下上一节，其中有一个线程栈（g0）的概念，线程栈即使在rt0_go中被初始化的。有了线程栈之后，线程利用线程栈执行newproc启动main goroutine。newproc的细节在我们已经在上一章中熟悉了，这里也不再赘述，重点将目光聚焦在newproc接收的func上。通过分析汇编代码，我们发现runtime.mainPC传入了newproc，函数位于<code>runtime/proc.go--func main</code>。</p>
+<p>runtime.main的流程如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">graph LR</span><br><span class="line">runtime.main--&gt;A(start sysmon)</span><br><span class="line">A--&gt;B(runtime.init)</span><br><span class="line">B--&gt;C(main.init)</span><br><span class="line">C--&gt;D(main.main)</span><br></pre></td></tr></table></figure>
+
+<p>除了上述流程，在runtime.main中还定义了协程栈的可扩容致的最大值：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> sys.PtrSize == <span class="number">8</span> &#123;</span><br><span class="line">	maxstacksize = <span class="number">1000000000</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">	maxstacksize = <span class="number">250000000</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="5-Go程序的摄像机-–-go-trace简介"><a href="#5-Go程序的摄像机-–-go-trace简介" class="headerlink" title="5. Go程序的摄像机 – go trace简介"></a>5. Go程序的摄像机 – go trace简介</h2><p>在调度的每个关键步骤旁都有一段代码在边上默默记录下发生的一切，就彷佛一台摄像机在观察着调度发生的一切，每一个goroutine的生老病死都在它的观测之下，这段代码所提供的服务就是go trace。当然为了使go trace运作，我们需要在代码中插入一些使能代码，告诉runtime中的trace代码摄像机被打开了，你们需要工作了。</p>
+<p>一个使用trace的简单例子：</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">"fmt"</span></span><br><span class="line">	<span class="string">"os"</span></span><br><span class="line">	<span class="string">"runtime"</span></span><br><span class="line">	<span class="string">"runtime/trace"</span></span><br><span class="line">	<span class="string">"time"</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span>&#123;</span><br><span class="line">	f, err := os.Create(<span class="string">"trace.out"</span>) <span class="comment">//定义记录trace的文件</span></span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="built_in">panic</span>(err)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">defer</span> f.Close()</span><br><span class="line"></span><br><span class="line">	err = trace.Start(f) <span class="comment">//开始记录trace</span></span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="built_in">panic</span>(err)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">defer</span> trace.Stop() <span class="comment">//在main方法结束时停止记录trace</span></span><br><span class="line"></span><br><span class="line">	ch := <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="keyword">bool</span>)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span>&#123;</span><br><span class="line">		time.Sleep(<span class="number">10000</span>)</span><br><span class="line">		ch&lt;-<span class="literal">true</span></span><br><span class="line">	&#125;()</span><br><span class="line">	fmt.Println(<span class="string">"waiting"</span>)</span><br><span class="line">	runtime.Gosched()</span><br><span class="line">	&lt;-ch</span><br><span class="line">	fmt.Println(<span class="string">"ok"</span>)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在<code>trace.Start</code>和<code>trace.Stop</code>发生这两个事件的时间戳之间的进程运行状态就会被trace记录下来。运行程序后在同级目录下会多出一份trace文件，使用<code>go tool trace {traceFile}</code>，浏览器会被自动打开并展示trace（需使用chrome）。如下图：</p>
+<p><img src="/2019/08/18/Time-to-Go/part2-go-schedule/trace1.PNG" alt="trace1"></p>
+<p>Trace的横轴为时间轴，纵轴分为两栏，一栏称为STATS，主要记录的是某时刻goroutines，heap，threads数量以及所处状态。</p>
+<ul>
+<li>Goroutines，记录了三种goroutine的状态</li>
+<li><ul>
+<li>Running：正在被执行的goroutine</li>
+<li>Runnable：在执行队列中可以被执行的goroutine</li>
+<li>GCWaiting：被gcAssist任务阻塞的goroutine</li>
+</ul>
+</li>
+<li>Heap，记录了两类内存：</li>
+<li><ul>
+<li>Allocated：在使用中的内存</li>
+<li>NextGC：在下次GC会被清理掉的内存</li>
+</ul>
+</li>
+<li>Thread，记录了两类线程<ul>
+<li>Running：执行goroutine的线程</li>
+<li>Syscall：执行Syscall的线程</li>
+</ul>
+</li>
+</ul>
+<p>另一栏称为PROCS，主要记录P上发生的事件，如上图的Proc0和Proc1就对应着两个P。而对于一些无法归结在某个P上的特殊事件则会归结在一个虚拟的时间轴上，如上图的Timer和Syscalls。</p>
+<p>Trace在显示事件时分为两类，一类是单个事件，显示为一条细线，一类是由两个事件组成的事件对，显示为一个色块，下文以xxx – xxx表示。</p>
+<p>首先关注一下特殊的时间轴和特殊事件有哪些：</p>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>事件</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Timers</td>
+<td>timer unblocks</td>
+<td>定时任务到时</td>
+</tr>
+<tr>
+<td>Syscall</td>
+<td>syscall exit</td>
+<td>（M）从syscall状态返回</td>
+</tr>
+<tr>
+<td>GC</td>
+<td>GC start – GC end</td>
+<td>处于GC状态的时间块</td>
+</tr>
+<tr>
+<td>NetPoll</td>
+<td>network unblocks</td>
+<td>（M）poll网络任务成功</td>
+</tr>
+</tbody></table>
+<p>发生在P上和goroutine相关的事件：</p>
+<ul>
+<li><p>GoStart–GoStop/GoEnd：</p>
+<p>正在运行的goroutine，显示的名称为newproc时传入的函数名称。goroutine状态由runable改变为running时会触发GoStart事件。goroutine状态由running改为其他时会触发GoStop/GoEnd事件。</p>
+<p>在调度过程中会触发GoStart的行为有：</p>
+<ul>
+<li><p>GoCreate：通过newproc创建出一个goroutine</p>
+</li>
+<li><p>GoSysExit：M从Syscall状态回归，重新执行goroutine。</p>
+</li>
+<li><p>GoUnblock：被阻塞的goroutine被重新加入执行队列，例如，timer unblocks，由于定时器到时unpark某个goroutine。chan接收端被chan发送端unpark。网络任务获取成功，unpark因网络而阻塞的goroutine…</p>
+</li>
+</ul>
+<p>在调度过程中会触发GoStop的行为：</p>
+<ul>
+<li>GoSchedule：goroutine状态由running改变为runnable，执行了runtime.GoSchedu，将goroutine调度到了队尾</li>
+<li>Preempt：goroutine状态由running改变为runnable，该goroutine被抢占，比如sysmon抢占，gc抢占等</li>
+<li>GoBlock, GoBlockSend, GoBlockRecv, GoBlockSelect, GoBlockSync, GoBlockCond, GoBlockNet, GoSleep, GoSysBlock, GoBlockGC：goroutine状态由running改变为waiting，这些事件将导致goroutine阻塞。</li>
+</ul>
+</li>
+<li><p>Syscall：</p>
+<p>当我们调用fmt.Print时，会发现P上也出现了一个Syscall相关的事件，这个事件和特殊事件中的Syscall有什么区别呢？在P上的Syscall一般是fastexitsyscall，M是不会主动与P解绑（handoffP），因此m在推出syscall时还是在这个P上，所以这种syscall可以说是属于某个P的。特殊事件中的Syscall，M在进入这种Syscall时有预感自己会被阻塞，它考虑到自己阻塞了不能耽误人家P啊，所以在进入Syscall时会主动和P解绑，这时它再从Syscall回来就不一定时原来的P了。但是有的fastexitsyscall也可能被sysmon强行解绑M和P（人艰不拆啊…），所以要根据展现出来的trace推断可能发生的事件…</p>
+</li>
+<li><p>GC相关（埋下伏笔，GC章节再来探讨吧）</p>
+</li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Time-to-go/" rel="tag"># Time to go</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/08/18/Time-to-Go/part1-go-abc/" rel="next" title="Go ABC">
+                <i class="fa fa-chevron-left"></i> Go ABC
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            Table of Contents
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            Overview
+          </li>
+        </ul>
+      
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">杨笛航</p>
+              <p class="site-description motion-element" itemprop="description"></p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">2</span>
+                  <span class="site-state-item-name">posts</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-categories">
+                
+                  <span class="site-state-item-count">1</span>
+                  <span class="site-state-item-name">categories</span>
+                
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                
+                  <span class="site-state-item-count">1</span>
+                  <span class="site-state-item-name">tags</span>
+                
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Go-Schedule"><span class="nav-number">1.</span> <span class="nav-text">Go Schedule</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-砖头，小车与Gopher-–-go的调度模型"><span class="nav-number">1.1.</span> <span class="nav-text">1. 砖头，小车与Gopher – go的调度模型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Gopher里的监工–Sysmon"><span class="nav-number">1.2.</span> <span class="nav-text">2. Gopher里的监工–Sysmon</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Go背后的故事"><span class="nav-number">1.3.</span> <span class="nav-text">3. Go背后的故事</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-上帝说要有光-–-main-goroutine"><span class="nav-number">1.4.</span> <span class="nav-text">4. 上帝说要有光 – main goroutine</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-Go程序的摄像机-–-go-trace简介"><span class="nav-number">1.5.</span> <span class="nav-text">5. Go程序的摄像机 – go trace简介</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">杨笛航</span>
+
+  
+</div>
+
+
+  <div class="powered-by">Powered by <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a></div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">Theme &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Muse</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
